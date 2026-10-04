@@ -46,8 +46,8 @@ jobs:
           cd kernel
           mkdir -p out
           
-          # Generate base GKI configuration
-          make ARCH=arm64 O=out gki_defconfig
+          # Generate base GKI configuration with Clang environment
+          make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
 
           # Configure debug symbols and BTF generation
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO
@@ -57,8 +57,8 @@ jobs:
           ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_COMPRESSED
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_BTF
 
-          # Sync config options
-          make ARCH=arm64 O=out olddefconfig
+          # Sync updated config options
+          make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
           # Sanity check BTF setting
           grep "CONFIG_DEBUG_INFO_BTF=y" out/.config || {
@@ -89,61 +89,33 @@ jobs:
           # Dump standalone raw BTF
           llvm-objcopy --dump-section .BTF=vmlinux.btf vmlinux
 
-          mkdir -p ../../dist
+          mkdir -p "$GITHUB_WORKSPACE/dist"
 
-          # 1. Standalone BTF
-          cp vmlinux.btf ../../dist/
+          # 1. Standalone raw BTF
+          cp vmlinux.btf "$GITHUB_WORKSPACE/dist/"
 
           # 2. Raw uncompressed kernel image for magiskboot repack
-          cp arch/arm64/boot/Image ../../dist/Image
+          cp arch/arm64/boot/Image "$GITHUB_WORKSPACE/dist/Image"
 
           # 3. Compressed unstripped vmlinux ELF
-          tar -czvf ../../dist/vmlinux.tar.gz vmlinux
+          tar -czvf "$GITHUB_WORKSPACE/dist/vmlinux.tar.gz" vmlinux
 
       - name: Package AnyKernel3 Zip
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
           rm -rf ak3/.git ak3/README.md
 
-          # Place raw Image into AnyKernel3 root
-          cp dist/Image ak3/Image
+          # Place compiled Image into AnyKernel3 root
+          cp "$GITHUB_WORKSPACE/dist/Image" ak3/Image
 
-          # Generate AnyKernel3 configuration for GKI 2.0 (boot partition)
-          cat << 'EOF' > ak3/anykernel.sh
-### AnyKernel3 Ramdisk Mod Script
-## osm0sis @ xda-developers
+          # Adapt AnyKernel3's stock anykernel.sh for generic GKI flashing
+          sed -i 's/kernel.string=.*/kernel.string=Android 12 ACK 5.10.168 GKI/g' ak3/anykernel.sh
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' ak3/anykernel.sh
+          sed -i 's/do.modules=1/do.modules=0/g' ak3/anykernel.sh
 
-### AnyKernel setup
-# global properties
-properties() { '
-kernel.string=Android 12 ACK 5.10.168 GKI
-do.devicecheck=0
-do.modules=0
-do.systemless=1
-do.cleanup=1
-do.cleanuponabort=0
-'; } # end properties
-
-### AnyKernel install
-# boot shell variables
-block=boot;
-is_slot_device=auto;
-ramdisk_compression=auto;
-patch_vbmeta_flag=auto;
-
-# import functions/variables and setup patching
-. tools/ak3-core.sh;
-
-# boot install
-dump_boot;
-write_boot;
-## end boot install
-EOF
-
-          # Create flashable AnyKernel3 zip
+          # Create flashable zip
           cd ak3
-          zip -r9 ../dist/AnyKernel3-android12-5.10.168.zip * -x .git README.md *placeholder
-          cd ..
+          zip -r9 "$GITHUB_WORKSPACE/dist/AnyKernel3-android12-5.10.168.zip" * -x .git README.md "*placeholder"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
