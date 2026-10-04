@@ -1,0 +1,98 @@
+name: Build Android 12 ACK 5.10 with BTF
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            dwarves \
+            llvm \
+            lld \
+            clang \
+            gcc-aarch64-linux-gnu \
+            zstd
+
+      - name: Clone ACK Common Kernel Tree
+        run: |
+          git clone --depth=1 --branch android12-5.10.168_r00 \
+            https://android.googlesource.com/kernel/common.git kernel
+
+      - name: Configure Kernel & Enable BTF
+        run: |
+          cd kernel
+          mkdir -p out
+          
+          # Generate base GKI configuration
+          make ARCH=arm64 O=out gki_defconfig
+
+          # Enable debug info and BTF generation
+          ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_DWARF4
+          ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_DWARF5
+          ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_REDUCED
+          ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_COMPRESSED
+          ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_BTF
+
+          # Sync updated config dependencies
+          make ARCH=arm64 O=out olddefconfig
+
+          # Verify BTF is enabled
+          grep "CONFIG_DEBUG_INFO_BTF=y" out/.config || {
+            echo "Error: CONFIG_DEBUG_INFO_BTF is not enabled."
+            exit 1
+          }
+
+      - name: Compile Kernel
+        run: |
+          cd kernel
+          make -j$(nproc) ARCH=arm64 O=out \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KCFLAGS="-Wno-error" \
+            Image vmlinux
+
+      - name: Extract BTF & Package Artifacts
+        run: |
+          cd kernel/out
+
+          # Check for BTF section inside vmlinux
+          llvm-readelf -S vmlinux | grep -w "\.BTF" || {
+            echo "Error: .BTF section not found in vmlinux!"
+            exit 1
+          }
+
+          # Extract raw BTF file (useful for CO-RE, KernelSU, eBPF)
+          llvm-objcopy --dump-section .BTF=vmlinux.btf vmlinux
+
+          # Compress vmlinux to fit artifact upload smoothly
+          tar -czvf vmlinux.tar.gz vmlinux
+          
+          mkdir -p ../../dist
+          cp vmlinux.btf ../../dist/
+          cp vmlinux.tar.gz ../../dist/
+          cp arch/arm64/boot/Image ../../dist/Image
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ACK-5.10.168-BTF-Artifacts
+          path: dist/*
+          retention-days: 7
