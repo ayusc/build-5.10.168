@@ -25,6 +25,8 @@ jobs:
       - name: Fix some bugs
         run: |
           sed -i '/ecdsa/d' kernel/crypto/Makefile
+          sed -i '/static struct mmc_host \*mtk_mmc_host/d' drivers/char/rpmb/rpmb-mtk.c
+          sed -i '/#include "ufs-mediatek.h"/a static struct mmc_host *mtk_mmc_host[] __maybe_unused = {NULL};' drivers/char/rpmb/rpmb-mtk.c
           
       - name: Configure Kernel
         run: |
