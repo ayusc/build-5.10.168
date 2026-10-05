@@ -1,4 +1,4 @@
-name: Simple Xiaomi Gold vmlinux Build
+name: Build Xiaomi Gold 
 
 on:
   push:
@@ -10,11 +10,7 @@ jobs:
   build-vmlinux:
     runs-on: ubuntu-22.04
     steps:
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo apt-get clean
-
+    
       - name: Install Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
@@ -32,7 +28,7 @@ jobs:
           mkdir -p out
           make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- gold_defconfig
 
-          # Enable debug and BTF flags required for structural parsing
+          # Enable debug and BTF flags 
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_DWARF4
           ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_DWARF5
@@ -40,9 +36,10 @@ jobs:
 
           make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-      - name: Compile vmlinux
+      - name: Build Kernel
         run: |
           cd kernel
+          make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- prepare
           make -j$(nproc) ARCH=arm64 O=out \
             LLVM=1 \
             LLVM_IAS=1 \
