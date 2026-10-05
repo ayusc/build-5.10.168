@@ -24,12 +24,12 @@ jobs:
 
       - name: Restore Missing ASN.1 Crypto Files
         run: |
-          cd kernel/crypto
-          curl -sS -O https://raw.githubusercontent.com/torvalds/linux/v5.10/crypto/ecdsasignature.asn1
-          curl -sS -O https://raw.githubusercontent.com/torvalds/linux/v5.10/crypto/ecprivkey.asn1
-          curl -sS -O https://raw.githubusercontent.com/torvalds/linux/v5.10/crypto/rsaprivkey.asn1
-          curl -sS -O https://raw.githubusercontent.com/torvalds/linux/v5.10/crypto/rsapubkey.asn1
-
+          cd kernel
+          curl -sS -f -o crypto/ecdsasignature.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/crypto/ecdsasignature.asn1
+          curl -sS -f -o crypto/rsapubkey.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/crypto/rsapubkey.asn1
+          curl -sS -f -o crypto/rsaprivkey.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/crypto/rsaprivkey.asn1
+          curl -sS -f -o certs/x509.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/certs/x509.asn1 || true
+          
       - name: Configure Kernel
         run: |
           cd kernel
