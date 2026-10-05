@@ -1,4 +1,4 @@
-name: Build Android 12 ACK 5.10 with BTF & AnyKernel3
+name: Simple Xiaomi Gold vmlinux Build
 
 on:
   push:
@@ -7,66 +7,40 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-kernel:
+  build-vmlinux:
     runs-on: ubuntu-22.04
     steps:
-      - name: Free Runner Disk Space
+      - name: Free Disk Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get clean
 
-      - name: Install Build Dependencies
+      - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            bc \
-            bison \
-            flex \
-            libssl-dev \
-            libelf-dev \
-            dwarves \
-            llvm \
-            lld \
-            clang \
-            gcc-aarch64-linux-gnu \
-            zstd \
-            zip \
-            unzip \
-            curl \
-            git
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential bc bison flex libssl-dev libelf-dev dwarves \
+            llvm lld clang gcc-aarch64-linux-gnu zstd zip unzip curl git
 
-      - name: Clone ACK Common Kernel Tree
+      - name: Clone Kernel Source
         run: |
-          git clone --depth=1 --branch android12-5.10.168_r00 \
-            https://android.googlesource.com/kernel/common.git kernel
+          git clone --depth=1 --branch gold-s-oss \
+            https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
 
       - name: Configure Kernel & Enable BTF
         run: |
           cd kernel
           mkdir -p out
-          
-          # Generate base GKI configuration with Clang environment
-          make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
+          make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- gold_defconfig
 
-          # Configure debug symbols and BTF generation
+          # Enable debug and BTF flags required for structural parsing
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_DWARF4
           ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_DWARF5
-          ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_REDUCED
-          ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_COMPRESSED
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_BTF
 
-          # Sync updated config options
           make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-          # Sanity check BTF setting
-          grep "CONFIG_DEBUG_INFO_BTF=y" out/.config || {
-            echo "Error: CONFIG_DEBUG_INFO_BTF is not enabled."
-            exit 1
-          }
-
-      - name: Compile Kernel
+      - name: Compile vmlinux
         run: |
           cd kernel
           make -j$(nproc) ARCH=arm64 O=out \
@@ -74,52 +48,21 @@ jobs:
             LLVM_IAS=1 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             KCFLAGS="-Wno-error" \
-            Image vmlinux
+            vmlinux
 
-      - name: Extract BTF & Prepare Raw Image
+      - name: Zip vmlinux Only
         run: |
+          mkdir -p dist
           cd kernel/out
-
-          # Verify BTF exists in compiled vmlinux
-          llvm-readelf -S vmlinux | grep -w "\.BTF" || {
-            echo "Error: .BTF section missing from vmlinux!"
+          if [ ! -f "vmlinux" ]; then
+            echo "Error: vmlinux was not generated!"
             exit 1
-          }
+          fi
+          zip -9 "$GITHUB_WORKSPACE/dist/vmlinux.zip" vmlinux
 
-          # Dump standalone raw BTF
-          llvm-objcopy --dump-section .BTF=vmlinux.btf vmlinux
-
-          mkdir -p "$GITHUB_WORKSPACE/dist"
-
-          # 1. Standalone raw BTF
-          cp vmlinux.btf "$GITHUB_WORKSPACE/dist/"
-
-          # 2. Raw uncompressed kernel image for magiskboot repack
-          cp arch/arm64/boot/Image "$GITHUB_WORKSPACE/dist/Image"
-
-          # 3. Compressed unstripped vmlinux ELF
-          tar -czvf "$GITHUB_WORKSPACE/dist/vmlinux.tar.gz" vmlinux
-
-      - name: Package AnyKernel3 Zip
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
-          rm -rf ak3/.git ak3/README.md
-
-          # Place compiled Image into AnyKernel3 root
-          cp "$GITHUB_WORKSPACE/dist/Image" ak3/Image
-
-          # Adapt AnyKernel3's stock anykernel.sh for generic GKI flashing
-          sed -i 's/kernel.string=.*/kernel.string=Android 12 ACK 5.10.168 GKI/g' ak3/anykernel.sh
-          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' ak3/anykernel.sh
-          sed -i 's/do.modules=1/do.modules=0/g' ak3/anykernel.sh
-
-          # Create flashable zip
-          cd ak3
-          zip -r9 "$GITHUB_WORKSPACE/dist/AnyKernel3-android12-5.10.168.zip" * -x .git README.md "*placeholder"
-
-      - name: Upload Artifacts
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ACK-5.10.168-Artifacts
-          path: dist/*
+          name: xiaomi-gold-vmlinux
+          path: dist/vmlinux.zip
           retention-days: 7
