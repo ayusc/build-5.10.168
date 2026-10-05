@@ -21,15 +21,6 @@ jobs:
         run: |
           git clone --depth=1 --branch gold-s-oss \
             https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
-
-      - name: Restore Missing ecdsasignature.asn1
-        run: |
-          cat << 'EOF' > kernel/crypto/ecdsasignature.asn1
-          ECDSASignature ::= SEQUENCE {
-              r   INTEGER ({ ecdsa_get_signature_r }),
-              s   INTEGER ({ ecdsa_get_signature_s })
-          }
-          EOF
           
       - name: Configure Kernel
         run: |
@@ -42,6 +33,7 @@ jobs:
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_DWARF4
           ./scripts/config --file out/.config --disable CONFIG_DEBUG_INFO_DWARF5
           ./scripts/config --file out/.config --enable CONFIG_DEBUG_INFO_BTF
+          ./scripts/config --file out/.config --disable CONFIG_CRYPTO_ECDSA
 
           make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
