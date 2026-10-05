@@ -1,4 +1,4 @@
-name: Build Xiaomi Gold 
+name: Build Xiaomi Redmi Gold 
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-vmlinux:
+  build-gold:
     runs-on: ubuntu-22.04
     steps:
     
@@ -22,7 +22,7 @@ jobs:
           git clone --depth=1 --branch gold-s-oss \
             https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
 
-      - name: Configure Kernel & Enable BTF
+      - name: Configure Kernel
         run: |
           cd kernel
           mkdir -p out
