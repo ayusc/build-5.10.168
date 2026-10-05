@@ -22,13 +22,14 @@ jobs:
           git clone --depth=1 --branch gold-s-oss \
             https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git kernel
 
-      - name: Restore Missing ASN.1 Crypto Files
+      - name: Restore Missing ecdsasignature.asn1
         run: |
-          cd kernel
-          curl -sS -f -o crypto/ecdsasignature.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/crypto/ecdsasignature.asn1
-          curl -sS -f -o crypto/rsapubkey.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/crypto/rsapubkey.asn1
-          curl -sS -f -o crypto/rsaprivkey.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/crypto/rsaprivkey.asn1
-          curl -sS -f -o certs/x509.asn1 https://raw.githubusercontent.com/torvalds/linux/v5.15/certs/x509.asn1 || true
+          cat << 'EOF' > kernel/crypto/ecdsasignature.asn1
+          ECDSASignature ::= SEQUENCE {
+              r   INTEGER ({ ecdsa_get_signature_r }),
+              s   INTEGER ({ ecdsa_get_signature_s })
+          }
+          EOF
           
       - name: Configure Kernel
         run: |
