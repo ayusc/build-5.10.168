@@ -40,6 +40,7 @@ jobs:
         run: |
           cd kernel
           make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- prepare
+          make ARCH=arm64 O=out LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
           make -j$(nproc) ARCH=arm64 O=out \
             LLVM=1 \
             LLVM_IAS=1 \
